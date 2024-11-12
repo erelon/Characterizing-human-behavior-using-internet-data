@@ -1,6 +1,8 @@
 import json
 from collections import defaultdict
 
+import tqdm
+
 
 def clean_post(post):
     # Define the fields you want to keep
@@ -27,19 +29,16 @@ def clean_comment(post):
 def get_from_subreddit(subreddit_name, all_data):
     jsonl_file = rf"C:\Users\erels\Downloads\r_{subreddit_name}_posts.jsonl"
     with open(jsonl_file, 'r', encoding='utf-8') as file:
-        for line in file:
+        for line in tqdm.tqdm(file):
             data = json.loads(line)
             out = clean_post(data)
             if out:
                 all_data[out[0]][subreddit_name].append(out[1])
 
-    if subreddit_name == "funny":
-        return
-
     jsonl_file = rf"C:\Users\erels\Downloads\r_{subreddit_name}_comments.jsonl"
     # Open the file and load each line as a JSON object
     with open(jsonl_file, 'r', encoding='utf-8') as file:
-        for line in file:
+        for line in tqdm.tqdm(file):
             data = json.loads(line)
             out = clean_comment(data)
             if out:
