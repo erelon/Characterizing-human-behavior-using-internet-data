@@ -1,101 +1,184 @@
 import praw
 from collections import defaultdict
 import pandas as pd
-import time
 from datetime import datetime
-import tqdm  # For progress tracking
+import time
+from tqdm import tqdm
+from secret import secret  # Ensure secret.py has your Reddit API credentials
 
-# Import your Reddit API credentials from a separate file (secret.py).
-from secret import secret
-
-# Set up the Reddit API client
+# Initialize Reddit API client
 reddit = praw.Reddit(**secret)
 
-# Define the subreddits
-depression_subreddit = 'depression'
-humor_subreddit = 'funny'
+# Subreddits as constants
+DEPRESSION_SUBREDDIT = 'depression'
+HUMOR_SUBREDDIT = 'funny'
 
-def get_recent_users(subreddit_name, limit=1000):
-    """Fetch unique users from recent posts and comments in a subreddit."""
-    users = {}
-    subreddit = reddit.subreddit(subreddit_name)
-    
-    for submission in tqdm.tqdm(subreddit.new(limit=limit), desc=f"Fetching users from r/{subreddit_name}"):
-        if submission.author and submission.author.name not in users:
-            users[submission.author.name] = submission.created_utc
-        for comment in submission.comments:
-            if comment.author and comment.author.name not in users:
-                users[comment.author.name] = comment.created_utc
-    return users
+def get_user_join_date(username):
+    try:
+        user = reddit.redditor(username)
+        return datetime.utcfromtimestamp(user.created_utc)
+    except Exception as e:
+        print(f"Error fetching join date for {username}: {e}")
+        return None
 
-def get_user_comments_in_subreddit(username, subreddit_name, before_timestamp, after_timestamp):
-    """Fetch user's comments in a specific subreddit within given time range."""
-    user_comments = []
-    user = reddit.redditor(username)
-    
-    for comment in user.comments.new(limit=None):
-        if comment.subreddit.display_name == subreddit_name:
-            comment_time = comment.created_utc
-            if before_timestamp <= comment_time <= after_timestamp:
-                user_comments.append(comment.body)
-                
-    return user_comments
+def fetch_user_activity(username, subreddit_name):
+    try:
+        user = reddit.redditor(username)
+        posts, comments = 0, 0
+        comment_texts = []
+        
+        # Use try-except for each iteration to handle potential errors
+        try:
+            for comment in user.comments.new(limit=None):
+                if comment.subreddit.display_name.lower() == subreddit_name.lower():
+                    comments += 1
+                    comment_texts.append({
+                        'text': comment.body,
+                        'created_utc': comment.created_utc
+                    })
+        except Exception as e:
+            print(f"Error fetching comments for {username}: {e}")
 
-def get_user_join_date_in_subreddit(username, subreddit_name):
-    """Fetch the join date for a user in a specific subreddit."""
-    user = reddit.redditor(username)
-    
-    for comment in user.comments.new(limit=None):
-        if comment.subreddit.display_name == subreddit_name:
-            return comment.created_utc
-    return None
+        try:
+            for submission in user.submissions.new(limit=None):
+                if submission.subreddit.display_name.lower() == subreddit_name.lower():
+                    posts += 1
+        except Exception as e:
+            print(f"Error fetching submissions for {username}: {e}")
+
+        return posts, comments, comment_texts
+    except Exception as e:
+        print(f"Error in fetch_user_activity for {username}: {e}")
+        return 0, 0, []
+
+def process_user_activity(username, dep_data, humor_subreddit):
+    try:
+        join_depression_date = dep_data['join_date']
+        posts_depression, comments_depression, texts_depression = fetch_user_activity(
+            username, DEPRESSION_SUBREDDIT)
+        
+        # Check activity in r/funny
+        try:
+            user = reddit.redditor(username)
+            is_in_funny = False
+            join_funny_date = None
+            
+            # Check comments first
+            for comment in user.comments.new(limit=100):  # Limit added to prevent excessive API calls
+                if comment.subreddit.display_name.lower() == humor_subreddit.lower():
+                    is_in_funny = True
+                    if join_funny_date is None or comment.created_utc < join_funny_date:
+                        join_funny_date = comment.created_utc
+                    
+            if not is_in_funny:
+                # Check submissions if no comments found
+                for submission in user.submissions.new(limit=100):
+                    if submission.subreddit.display_name.lower() == humor_subreddit.lower():
+                        is_in_funny = True
+                        if join_funny_date is None or submission.created_utc < join_funny_date:
+                            join_funny_date = submission.created_utc
+                        break
+                        
+        except Exception as e:
+            print(f"Error checking r/funny activity for {username}: {e}")
+            return None
+
+        # If user is not active in r/funny, return basic data
+        if not is_in_funny:
+            return {
+                'Username': username,
+                'Join Date (r/depression)': join_depression_date,
+                'Posts in r/depression': posts_depression,
+                'Comments in r/depression': comments_depression,
+                'Texts in r/depression': [t['text'] for t in texts_depression],
+                'Join Date (r/funny)': None,
+                'Posts in r/funny': 0,
+                'Comments in r/funny': 0,
+                'Texts in r/funny': []
+            }
+
+        # Fetch r/funny activity
+        posts_funny, comments_funny, texts_funny = fetch_user_activity(username, humor_subreddit)
+
+        # Calculate activity before and after joining r/funny
+        dep_posts_before = dep_posts_after = dep_comments_before = dep_comments_after = 0
+
+        if join_funny_date and texts_depression:
+            for text in texts_depression:
+                if text['created_utc'] < join_funny_date:
+                    dep_comments_before += 1
+                else:
+                    dep_comments_after += 1
+
+        return {
+            'Username': username,
+            'Join Date (r/depression)': join_depression_date,
+            'Join Date (r/funny)': datetime.utcfromtimestamp(join_funny_date) if join_funny_date else None,
+            'Posts in r/depression before joining r/funny': dep_posts_before,
+            'Comments in r/depression before joining r/funny': dep_comments_before,
+            'Posts in r/depression after joining r/funny': dep_posts_after,
+            'Comments in r/depression after joining r/funny': dep_comments_after,
+            'Posts in r/funny': posts_funny,
+            'Comments in r/funny': comments_funny,
+            'Texts in r/depression': [t['text'] for t in texts_depression],
+            'Texts in r/funny': [t['text'] for t in texts_funny]
+        }
+    except Exception as e:
+        print(f"Error processing user {username}: {e}")
+        return None
 
 def main():
-    # Step 1: Collect initial users from the depression subreddit
-    depression_users = get_recent_users(depression_subreddit, limit=100)
-    
-    # Data storage
-    matched_user_data = []
-    
-    # Step 2: Check activity in r/funny after joining r/depression
-    for user, depression_join_time in tqdm.tqdm(depression_users.items(), desc="Analyzing user activity", total=len(depression_users)):
-        humor_join_time = get_user_join_date_in_subreddit(user, humor_subreddit)
-        
-        # Ensure the user joined r/funny after r/depression
-        if humor_join_time and humor_join_time > depression_join_time:
-            # Fetch comments in r/depression before and after joining r/funny
-            before_comments = get_user_comments_in_subreddit(user, depression_subreddit, 0, humor_join_time)
-            after_comments = get_user_comments_in_subreddit(user, depression_subreddit, humor_join_time, time.time())
-            
-            # Fetch comments in r/funny after joining
-            funny_comments = get_user_comments_in_subreddit(user, humor_subreddit, humor_join_time, time.time())
-            
-            # Calculate daily activity
-            days_before = (humor_join_time - depression_join_time) / 86400
-            days_after = (time.time() - humor_join_time) / 86400
-            
-            daily_comments_before = len(before_comments) / days_before if days_before > 0 else 0
-            daily_comments_after = len(after_comments) / days_after if days_after > 0 else 0
-            daily_funny_comments = len(funny_comments) / days_after if days_after > 0 else 0
-            
-            # Append to results
-            matched_user_data.append({
-                'Username': user,
-                'Join Date (r/depression)': datetime.utcfromtimestamp(depression_join_time),
-                'Join Date (r/funny)': datetime.utcfromtimestamp(humor_join_time),
-                'Daily Comments (r/depression) Before': daily_comments_before,
-                'Daily Comments (r/depression) After': daily_comments_after,
-                'Daily Comments (r/funny)': daily_funny_comments,
-                'Comments (r/depression) Before': before_comments,
-                'Comments (r/depression) After': after_comments,
-                'Comments (r/funny)': funny_comments,
-            })
-            time.sleep(0.5)  # To avoid hitting Reddit's rate limit
-    
-    # Step 3: Save to Excel
-    df = pd.DataFrame(matched_user_data)
-    df.to_excel('user_humor_depression_activity.xlsx', index=False)
-    print("Data saved to user_humor_depression_activity.xlsx")
+    # Define DataFrame to store user data
+    user_data = []
+    depression_users = defaultdict(lambda: {'join_date': None, 'posts': 0, 'comments': 0, 'comment_texts': []})
+
+    # Collect users from r/depression
+    print("Collecting users from r/depression...")
+    try:
+        subreddit = reddit.subreddit(DEPRESSION_SUBREDDIT)
+        for submission in tqdm(subreddit.new(limit=1000), desc="Fetching r/depression users"):
+            if submission.author:
+                user = submission.author.name
+                depression_users[user]['posts'] += 1
+                depression_users[user]['join_date'] = get_user_join_date(user)
+
+            submission.comments.replace_more(limit=0)
+            for comment in submission.comments.list():
+                if comment.author:
+                    user = comment.author.name
+                    depression_users[user]['comments'] += 1
+                    depression_users[user]['join_date'] = get_user_join_date(user)
+                    depression_users[user]['comment_texts'].append({
+                        'text': comment.body,
+                        'created_utc': comment.created_utc
+                    })
+    except Exception as e:
+        print(f"Error collecting depression subreddit data: {e}")
+        return
+
+    # Process each user
+    print("Processing users for r/funny activity...")
+    for username, dep_data in tqdm(depression_users.items(), desc="Processing users"):
+        user_result = process_user_activity(username, dep_data, HUMOR_SUBREDDIT)
+        if user_result:
+            user_data.append(user_result)
+
+        # Add delay to avoid rate limiting
+        time.sleep(0.5)
+
+    # Save to Excel
+    try:
+        df = pd.DataFrame(user_data)
+        df.to_excel('user_activity_depression_funny.xlsx', index=False)
+        print("Data saved to user_activity_depression_funny.xlsx")
+    except Exception as e:
+        print(f"Error saving data to Excel: {e}")
+        # Backup save as CSV
+        try:
+            df.to_csv('user_activity_depression_funny.csv', index=False)
+            print("Backup data saved to user_activity_depression_funny.csv")
+        except Exception as e:
+            print(f"Error saving backup data: {e}")
 
 if __name__ == '__main__':
     main()
