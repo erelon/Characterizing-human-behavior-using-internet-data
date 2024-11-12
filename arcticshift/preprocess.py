@@ -6,9 +6,10 @@ def clean_post(post):
     # Define the fields you want to keep
     if post['author'] == '[deleted]':
         return None
-    fields_to_keep = ['id', 'title', 'selftext', 'created_utc', 'subreddit', 'permalink']
+    fields_to_keep = ['id', 'title', 'selftext', 'created_utc']
     cleaned_post = {field: post[field] for field in fields_to_keep}
     cleaned_post["body"] = cleaned_post.pop("selftext")
+    cleaned_post["is_post"] = True
     return post['author'], cleaned_post
 
 
@@ -16,9 +17,10 @@ def clean_comment(post):
     # Define the fields you want to keep
     if post['author'] == '[deleted]':
         return None
-    fields_to_keep = ['id', 'body', 'created_utc', 'subreddit', 'permalink']
+    fields_to_keep = ['id', 'body', 'created_utc']
     cleaned_post = {field: post[field] for field in fields_to_keep}
     cleaned_post["title"] = ""
+    cleaned_post["is_post"] = False
     return post["author"], cleaned_post
 
 
