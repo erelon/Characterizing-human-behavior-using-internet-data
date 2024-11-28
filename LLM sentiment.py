@@ -23,22 +23,25 @@ def label_comment(comment):
     - Example of depression/sadness: "I don’t see the point in anything anymore."
     - Example of NOT depression/sadness: "I’m just trying to figure out if this makes sense."
 
-    2. **Lack of joy or positivity**: Evaluate if the comment lacks joy, positivity, or an optimistic outlook. This could include pessimism, frustration, or negativity, but it should be based on the tone and words, not just the statement of a negative fact.
-    - **Do not rate confusion, frustration, or sarcastic remarks as lacking joy** unless they indicate a deeper sense of negativity or hopelessness. For example, if someone is joking or using humor without any emotional distress, it should not be rated high on lack of joy/positivity.
-    - Example of lack of joy/positivity: "Everything feels so bleak and hopeless."
-    - Example of positivity: "Even though things are tough, I'm still holding on to hope."
+    2. **Emotional Well-being**: Evaluate the level of emotional well-being expressed in the comment. A lower score reflects positivity, neutrality, or emotional stability, while a higher score reflects negativity, pessimism, or poor well-being.  
+   - **DO NOT** rate comments as lacking emotional well-being if they are neutral, humorous, sarcastic, or questioning without negativity, despair, or hopelessness.  
+   - **Sarcastic or humorous comments should generally score 0** unless there is an underlying sense of emotional distress.  
+   - Example of poor emotional well-being: "Everything feels so bleak and hopeless."  
+   - Example of neutral or positive emotional well-being: "Even though things are tough, I'm still holding on to hope."  
+   - Example of NEUTRAL emotional well-being (score 0): "Who is responsible for this? Have you asked anyone?"
 
     For each comment, provide two ratings on a scale of 0 to 3:
     - **Depression/Sadness (0 to 3)**: How much does this comment reflect real signs of depression or sadness? (0 = No signs, 3 = Very strong signs of sadness or depression)
-    - **Lack of Joy/Positivity (0 to 3)**: How much does this comment reflect a lack of joy or positivity? (0 = Very joyful/positive, 3 = Completely lacking joy/positivity)
+    - **Emotional Well-being (0 to 3)**: How much does this comment reflect a lack of emotional well-being? (0 = Very positive/high well-being or neutral, 3 = Completely lacking well-being)
 
     The comment might use exaggeration, sarcasm, or questioning. **Focus on whether the comment communicates genuine emotional distress or sadness, not on frustration or confusion**.
 
     Comment: "{comment}"
     Response format:
     Depression/Sadness: [number between 0 and 3]
-    Lack of Joy/Positivity: [number between 0 and 3]
+    Emotional Well-being: [number between 0 and 3]
     """
+
 
 
     try:
@@ -56,7 +59,7 @@ def label_comment(comment):
         result = response['choices'][0]['message']['content'].strip()
 
         # Handle the case where the response format is not as expected
-        if "Depression/Sadness" not in result or "Lack of Joy/Positivity" not in result:
+        if "Depression/Sadness" not in result or "Emotional Well-being" not in result:
             return f"Unexpected response format: {result}"
 
         dep, well_being = result.split('\n')
