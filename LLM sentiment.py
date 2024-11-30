@@ -7,7 +7,7 @@ from secret import api_key  # Import the API key from secret.py
 
 # Load your data
 df = pd.read_excel("filtered_depression_comments_and_posts.xlsx")
-comments = df['Text'].head(10).tolist()  # Limit to first 10 comments
+comments = df['Text'].head(100).tolist()  # Limit to first 10 comments
 
 # OpenAI API setup
 openai.api_key = api_key  # Replace with your actual API key
@@ -17,29 +17,30 @@ def label_comment(comment):
     prompt = f"""
     You are an advanced language model trained to analyze emotional tones in comments. Your task is to evaluate each comment based on two attributes:
 
-    1. **Signs of depression or sadness**: Focus on whether the speaker indicates any real signs of depression or sadness of their own. Look for language that reflects feelings of hopelessness, helplessness, despair, or deep emotional pain.
-    - **Do not rate comments that express mild frustration, confusion, or questioning as depressive** unless they clearly communicate feelings of despair or hopelessness. For example, asking a series of questions or expressing doubt about something does not necessarily indicate sadness or depression.
-    - **Do not rate exaggerated statements or sarcasm as depressive** unless they contain clear indicators of emotional distress. For example, humor or sarcasm used for exaggeration should not be interpreted as depression unless there is an underlying tone of hopelessness or despair.
-    - Example of depression/sadness: "I don’t see the point in anything anymore."
+    1. **Signs of depression or sadness**: Determine whether the comment contains clear indications of depression or sadness.  
+    - **Rate as 1 (depressed/sad)** if the comment reflects hopelessness, despair, deep emotional pain, or sadness.  
+    - **Rate as 0 (not depressed/sad)** if the comment does not show these signs, even if it expresses mild frustration, sarcasm, questioning, or confusion without underlying despair.  
+    - Example of depression/sadness: "I don’t see the point in anything anymore."  
     - Example of NOT depression/sadness: "I’m just trying to figure out if this makes sense."
 
-    2. **Emotional Well-being**: Evaluate the level of emotional well-being expressed in the comment. A lower score reflects positivity, neutrality, or emotional stability, while a higher score reflects negativity, pessimism, or poor well-being.  
-   - **DO NOT** rate comments as lacking emotional well-being if they are neutral, humorous, sarcastic, or questioning without negativity, despair, or hopelessness.  
-   - **Sarcastic or humorous comments should generally score 0** unless there is an underlying sense of emotional distress.  
-   - Example of poor emotional well-being: "Everything feels so bleak and hopeless."  
-   - Example of neutral or positive emotional well-being: "Even though things are tough, I'm still holding on to hope."  
-   - Example of NEUTRAL emotional well-being (score 0): "Who is responsible for this? Have you asked anyone?"
+    2. **Emotional Well-being**: Assess the emotional well-being expressed in the comment.  
+    - **Rate as 1 (poor emotional well-being)** if the comment reflects negativity, pessimism, or emotional distress.  
+    - **Rate as 0 (good emotional well-being)** if the comment is neutral, positive, stable, humorous, sarcastic, or questioning without emotional distress.  
+    - Example of poor emotional well-being: "Everything feels so bleak and hopeless."  
+    - Example of neutral or positive emotional well-being: "Even though things are tough, I'm still holding on to hope."  
 
-    For each comment, provide two ratings on a scale of 0 to 3:
-    - **Depression/Sadness (0 to 3)**: How much does this comment reflect real signs of depression or sadness? (0 = No signs, 3 = Very strong signs of sadness or depression)
-    - **Emotional Well-being (0 to 3)**: How much does this comment reflect a lack of emotional well-being? (0 = Very positive/high well-being or neutral, 3 = Completely lacking well-being)
+    **Important Notes:**  
+    - **Sarcasm or humor** should generally score 0 for both attributes unless there are clear indications of sadness or emotional distress.  
+    - **Neutral comments** (e.g., asking questions or expressing mild frustration) should also score 0 for both attributes.
 
-    The comment might use exaggeration, sarcasm, or questioning. **Focus on whether the comment communicates genuine emotional distress or sadness, not on frustration or confusion**.
+    For each comment, provide two ratings:  
+    - **Depression/Sadness**: 0 = Not depressed, 1 = Depressed  
+    - **Emotional Well-being**: 0 = Good well-being, 1 = Poor well-being  
 
-    Comment: "{comment}"
-    Response format:
-    Depression/Sadness: [number between 0 and 3]
-    Emotional Well-being: [number between 0 and 3]
+    Comment: "{comment}"  
+    Response format:  
+    Depression/Sadness: [0 or 1]  
+    Emotional Well-being: [0 or 1]  
     """
 
 
