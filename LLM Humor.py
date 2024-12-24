@@ -4,11 +4,9 @@ from tqdm import tqdm  # Import tqdm for the progress bar
 
 from secret import api_key  # Import the API key from secret.py
 
-
-
 # Load your data
 df = pd.read_excel("filtered_depression_comments_and_posts.xlsx")
-comments = df['Text'].head(100).tolist()  # Limit to first 10 comments
+comments = df['Text'].tolist()  # Include all comments
 
 # OpenAI API setup
 openai.api_key = api_key  # Replace with your actual API key
@@ -19,38 +17,38 @@ def label_comment(comment):
     You are an advanced language model trained to analyze humor in comments. Your task is to evaluate comments based on two attributes related to humor:
 
     1. **Humor Intent**: Does the comment attempt to be humorous through jokes, puns, playful exaggerations, or other forms of comedic intent?  
-    - **Rate as 1 (humorous intent)** if the comment clearly tries to be funny or comedic.  
-    - **Rate as 0 (no humorous intent)** if the comment does not show any effort to amuse.  
-    - Examples of humorous intent: "Why don’t skeletons fight each other? They don’t have the guts." or "I told my computer I needed a break, and now it won't stop sending me coffee memes."  
-    - Examples of no humorous intent: "I went to the store and bought some milk." or "Can someone explain how this works?"
+       - **Rate on a scale of 0 to 5**:
+         - 0: No humor intent at all
+         - 1: Minimal or unclear humor intent
+         - 2: Slight humor intent
+         - 3: Moderate humor intent
+         - 4: Strong humor intent
+         - 5: Very clear and deliberate humor intent  
+       - Examples:
+         - 5: "Why don’t skeletons fight each other? They don’t have the guts."
+         - 0: "I went to the store and bought some milk."
 
-    2. **Commenter's Amusement**: Does the comment suggest that the commenter themselves is entertained, amused, or laughing?  
-    - **Rate as 1 (entertained)** if the comment shows clear expressions of amusement (e.g., "lol," "haha," or playful acknowledgment of humor).  
-    - **Rate as 0 (not entertained)** if the comment does not indicate any enjoyment or laughter.  
-    - Examples of entertained commenters: "Haha, that's hilarious!" or "LOL, I can't stop laughing."  
-    - Examples of not entertained commenters: "I don't find this funny." or "This makes no sense to me."
-
-    ### Guidelines:
-    - **Focus on clear intent or emotional tone**: For humor intent, evaluate whether the comment is designed to amuse. For commenter amusement, assess whether the comment expresses enjoyment or laughter, even if the humor is external to the comment itself.
-    - Distinguish between failed humor attempts and successful self-amusement.
-
-    For each comment, provide two ratings:
-    - **Humor Intent**: 0 = No humor intent, 1 = Clear humor intent  
-    - **Commenter's Amusement**: 0 = Not entertained, 1 = Clearly entertained  
+    2. **Commenter's Amusement**: Is the commenter genuinely entertained, expressing joy or laughter? Look for explicit signs like "haha," "lol," or playful acknowledgment of humor.  
+       - **Rate on a scale of 0 to 5**:
+         - 0: No amusement or enjoyment expressed
+         - 1: Minimal or unclear amusement
+         - 2: Slight amusement
+         - 3: Moderate amusement
+         - 4: Strong amusement
+         - 5: Very clear amusement, such as "LOL, I can't stop laughing!"  
+       - Examples:
+         - 5: "Haha, that's hilarious!"  
+         - 0: "This makes no sense to me."
 
     Comment: "{comment}"  
     Response format:  
-    Humor Intent: [0 or 1]  
-    Commenter's Amusement: [0 or 1]  
+    Humor Intent: [0–5]  
+    Commenter's Amusement: [0–5]  
     """
-
-
-
-
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Correct model name
+            model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": "You are an advanced language model trained to analyze humor in comments."},
                 {"role": "user", "content": prompt}
@@ -62,28 +60,29 @@ def label_comment(comment):
         # Extract the response
         result = response['choices'][0]['message']['content'].strip()
 
-        # Handle the case where the response format is not as expected
-        if "Humor Intent" not in result or "Commenter's Amusement" not in result:
+        # Ensure the response contains both attributes
+        if "Humor Intent" in result and "Commenter's Amusement" in result:
+            # Parse the scores
+            lines = result.split('\n')
+            humor_score = int(lines[0].split(":")[1].strip())
+            amusement_score = int(lines[1].split(":")[1].strip())
+            return humor_score, amusement_score
+        else:
             return f"Unexpected response format: {result}"
-
-        humor, amusment = result.split('\n')
-        humor_score = int(humor.split(":")[1].strip())
-        amusment_score = int(amusment.split(":")[1].strip())
-        return humor_score, amusment_score
 
     except Exception as e:
         return f"Error processing comment: {e}"
 
 # Batch process comments with tqdm progress bar
 results = []
-for comment in tqdm(comments, desc="Processing comments"):  # Add tqdm here
+for comment in tqdm(comments, desc="Processing comments"):
     result = label_comment(comment)
-    if isinstance(result, tuple):  # If it's a valid tuple (depression, emotional well-being score)
+    if isinstance(result, tuple):  # If it's a valid tuple
         results.append((comment, result[0], result[1]))
     else:  # If it's an error message
-        print(f"Error processing comment: {result}")  # Output the error for debugging purposes
+        print(f"Error processing comment: {result}")
         results.append((comment, None, None))
 
 # Save results to a CSV
-output_df = pd.DataFrame(results, columns=["comment", "Humor_intent", "Commenter's Amusement"])
-output_df.to_csv("labeled_comments2.csv", index=False)
+output_df = pd.DataFrame(results, columns=["comment", "Humor Intent", "Commenter's Amusement"])
+output_df.to_csv("labeled_humor.csv", index=False)
